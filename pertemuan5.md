@@ -276,6 +276,216 @@ if docs:
 print("Data berhasil dibuat. Total:", collection.count_documents({}))
 ```
 
+---
+# PANDUAN STEP-BY-STEP UNTUK membuat 1000 data dummy menggunakan Python
+**membuat dan Menjalankan Script Python `generate_produksi_harian.py`
+---
+
+## Daftar Isi
+1. [Apa yang Akan Kita Lakukan](#1-apa-yang-akan-kita-lakukan)
+2. [Periksa Apakah Python Sudah Terinstal](#2-periksa-apakah-python-sudah-terinstal)
+3. [Instal Python (Jika Belum Ada)](#3-instal-python-jika-belum-ada)
+4. [Instal Library PyMongo](#4-instal-library-pymongo)
+5. [Buat dan Simpan Script Python](#5-buat-dan-simpan-script-python)
+6. [Jalankan Script](#6-jalankan-script)
+7. [Verifikasi Data di MongoDB](#7-verifikasi-data-di-mongodb)
+8. [Troubleshooting Umum](#8-troubleshooting-umum)
+
+---
+
+### 1. Apa yang Akan Kita Lakukan
+Kita akan menjalankan sebuah program Python kecil untuk mengisi database MongoDB dengan 1000 data produksi pabrik. Data ini nanti digunakan untuk latihan agregasi (OEE). **Anda tidak perlu mengerti bahasa Python secara mendalam**, cukup ikuti langkah-langkah berikut.
+
+---
+
+### 2. Periksa Apakah Python Sudah Terinstal
+1. Buka **Command Prompt** (Windows) atau **Terminal** (Linux/macOS).
+   - Windows: tekan tombol `Windows + R`, ketik `cmd`, lalu Enter.
+2. Ketik perintah berikut, lalu tekan Enter:
+   ```bash
+   python --version
+   ```
+   atau
+   ```bash
+   python3 --version
+   ```
+3. **Jika muncul versi Python (misal `Python 3.10.5`)**, lanjut ke [Langkah 4](#4-instal-library-pymongo).
+   **Jika muncul pesan error atau "command not found"**, lanjut ke [Langkah 3](#3-instal-python-jika-belum-ada).
+
+---
+
+### 3. Instal Python (Jika Belum Ada)
+
+#### Untuk Windows
+1. Buka browser, kunjungi [https://www.python.org/downloads/](https://www.python.org/downloads/).
+2. Klik tombol **Download Python 3.x.x** (versi terbaru).
+3. Buka file installer yang sudah diunduh.
+4. **PENTING:** Centang kotak **Add Python to PATH** (di bagian bawah jendela installer).
+5. Klik **Install Now**.
+6. Tunggu sampai selesai, lalu klik **Close**.
+
+> **Mengapa harus centang Add to PATH?**
+> Agar kita bisa memanggil Python dari mana saja di Command Prompt.
+
+#### Untuk macOS
+- Buka Terminal, lalu instal melalui Homebrew (jika punya):
+  `brew install python`
+  Atau unduh dari python.org (pilih macOS installer).
+
+#### Untuk Linux (Ubuntu/Debian)
+- Buka Terminal, jalankan:
+  ```bash
+  sudo apt update
+  sudo apt install python3 python3-pip
+  ```
+
+Setelah instalasi selesai, **buka ulang Command Prompt / Terminal**, lalu ulangi langkah 2 untuk verifikasi.
+
+---
+
+### 4. Instal Library PyMongo
+PyMongo adalah *driver* yang menghubungkan Python dengan MongoDB. Kita perlu menginstalnya.
+
+1. Pastikan **Command Prompt / Terminal** masih terbuka.
+2. Ketik perintah berikut, lalu Enter:
+   ```bash
+   pip install pymongo
+   ```
+   (Jika perintah `pip` tidak dikenali, coba `pip3 install pymongo` atau `python -m pip install pymongo`)
+
+3. Tunggu proses unduh dan instal. Jika muncul `Successfully installed pymongo-...`, maka siap.
+
+> **Verifikasi:** ketik `python -c "import pymongo"` – jika tidak ada error, PyMongo sudah terinstal.
+
+---
+
+### 5. Buat dan Simpan Script Python
+Script di bawah ini akan membuat database `studi_kasus_oee` dan mengisi koleksi `produksi_harian` dengan 1000 dokumen.
+
+1. Buka **Notepad** (Windows) atau editor teks apa pun (VS Code, Sublime, Notepad++).
+2. Salin (copy) seluruh kode di bawah ini:
+   ```python
+   from pymongo import MongoClient
+   from datetime import datetime, timedelta
+   import random
+
+   # Koneksi ke MongoDB lokal
+   client = MongoClient('mongodb://localhost:27017')
+   db = client['studi_kasus_oee']
+   collection = db['produksi_harian']
+   collection.drop()  # Hapus koleksi lama agar bersih
+
+   # Daftar 10 mesin (M01 - M10)
+   mesin_list = [f"M{i:02d}" for i in range(1, 11)]
+   start_date = datetime(2026, 4, 1)
+   docs = []
+
+   for i in range(1000):
+       # Acak hari dalam 90 hari (3 bulan)
+       day_offset = random.randint(0, 90)
+       tanggal = start_date + timedelta(days=day_offset)
+       shift = random.randint(1, 3)
+       mesin = random.choice(mesin_list)
+       target = random.randint(200, 500)
+       # Hasil aktual kadang di bawah target (60%-100%)
+       actual_ok = int(target * random.uniform(0.6, 1.0))
+       # Reject 0-15% dari hasil ok
+       actual_reject = int(actual_ok * random.uniform(0, 0.15))
+       durasi_tersedia = 480  # 8 jam kerja
+       durasi_operasi = int(durasi_tersedia * random.uniform(0.7, 1.0))
+
+       doc = {
+           "mesin": mesin,
+           "tanggal": tanggal,
+           "shift": shift,
+           "target": target,
+           "actual_ok": actual_ok,
+           "actual_reject": actual_reject,
+           "durasi_operasi_menit": durasi_operasi,
+           "durasi_tersedia_menit": durasi_tersedia
+       }
+       docs.append(doc)
+
+       # Setiap 500 dokumen disimpan sekaligus (lebih cepat)
+       if len(docs) >= 500:
+           collection.insert_many(docs)
+           docs.clear()
+
+   # Simpan sisa dokumen
+   if docs:
+       collection.insert_many(docs)
+
+   print("Data berhasil dibuat. Total:", collection.count_documents({}))
+   ```
+
+3. Klik **File → Save As**.
+4. Pilih lokasi penyimpanan (misal `D:\Kuliah\` atau `~/Documents/`).
+5. Pada **Save as type**, pilih **All Files** (bukan `.txt`).
+6. Beri nama file **`generate_produksi_harian.py`** (pastikan ekstensi `.py`).
+7. Klik **Save**.
+
+> **Lokasi penyimpanan penting** karena kita akan menavigasi ke folder tersebut di Command Prompt.
+
+---
+
+### 6. Jalankan Script
+1. Buka **Command Prompt** atau **Terminal**.
+2. Pindah ke folder tempat Anda menyimpan script tadi.
+   Contoh (Windows):
+   ```bash
+   cd D:\Kuliah
+   ```
+   (ganti `D:\Kuliah` dengan lokasi folder Anda)
+3. Jalankan script dengan perintah:
+   ```bash
+   python generate_produksi_harian.py
+   ```
+   (Jika perintah python tidak dikenali, coba `python3 generate_produksi_harian.py`)
+
+4. Amati output:
+   ```
+   Data berhasil dibuat. Total: 1000
+   ```
+
+**Jika muncul error**, lihat [Troubleshooting](#8-troubleshooting-umum) di bawah.
+
+---
+
+### 7. Verifikasi Data di MongoDB
+Sekarang kita cek apakah data sudah masuk ke MongoDB.
+
+1. Buka **MongoDB Shell** (`mongosh`).
+2. Jalankan perintah berikut:
+   ```javascript
+   use studi_kasus_oee
+   db.produksi_harian.countDocuments()
+   ```
+   Hasilnya harus **1000**.
+3. Lihat satu contoh dokumen:
+   ```javascript
+   db.produksi_harian.findOne()
+   ```
+
+Selamat! Anda telah berhasil membuat dataset OEE. Kini Anda bisa melanjutkan ke praktik agregasi.
+
+---
+
+### 8. Troubleshooting Umum
+
+| Error | Penyebab | Solusi |
+|-------|----------|--------|
+| `'python' is not recognized...` | Python tidak ada di PATH | Restart Command Prompt, atau instal ulang dengan centang "Add Python to PATH" |
+| `ModuleNotFoundError: No module named 'pymongo'` | PyMongo belum terinstal | Jalankan `pip install pymongo` |
+| `Connection refused` atau `ServerSelectionTimeoutError` | MongoDB server tidak berjalan | Buka Services (Windows) / `systemctl` (Linux) dan jalankan MongoDB, atau buka Compass untuk tes koneksi |
+| `SyntaxError: invalid syntax` | Kode tidak disalin dengan lengkap | Hapus file, buka Notepad, salin ulang kode dari panduan ini, simpan dengan ekstensi `.py` |
+| `collection.drop()` tidak bisa | Tidak ada data sebelumnya / permission | Aman, lanjut saja |
+| Script berhenti di tengah | Mungkin ada masalah koneksi atau versi Python | Coba kurangi jumlah loop menjadi 100 dulu untuk tes: ganti `range(1000)` menjadi `range(100)` |
+
+
+---
+
+
+
 **Alternatif langsung di `mongosh` (JavaScript):**
 ```javascript
 use studi_kasus_oee
@@ -792,7 +1002,9 @@ Kumpulkan laporan dalam bentuk **PDF** dengan struktur:
    - Script pembangkit data (jika menggunakan Python)
    - Semua perintah dalam satu file `.txt` atau `.js`
 
-**Pengumpulan:** Unggah PDF di LMS paling lambat sebelum pertemuan 6.
+**Pengumpulan:** Unggah doc/docx pada link berikut : <https://forms.gle/CvU6yjzEfFuBy6mb8>
+
+paling lambat sebelum pertemuan 6
 
 ---
 
